@@ -1,6 +1,6 @@
 import { observable } from '@legendapp/state';
-import { Platform } from 'react-native';
 import type { Todo } from '../types';
+import { getSupabase, getCurrentUserId } from '../lib/supabase';
 
 /**
  * Generate a unique ID for new todos
@@ -27,47 +27,87 @@ function createTodo(position: number): Todo {
 
 /**
  * Observable store for todos using Legend-State
- * Provides high-performance reactive state management
  */
 export const todosStore$ = observable<{
     todos: Todo[];
     focusedId: string | null;
+    userId: string | null;
+    syncing: boolean;
 }>({
-    todos: [createTodo(0)], // Start with one empty row
+    todos: [createTodo(0)],
     focusedId: null,
+    userId: null,
+    syncing: false,
 });
 
 /**
- * Initialize persistence - call this from _layout.tsx useEffect
- * This defers AsyncStorage access to avoid SSR issues
+ * Initialize persistence - loads from Supabase
  */
 export async function initPersistence(): Promise<void> {
-    // Only run on client-side
     if (typeof window === 'undefined') return;
 
     try {
-        const { configureObservablePersistence, persistObservable } = await import(
-            '@legendapp/state/persist'
-        );
-        const { ObservablePersistAsyncStorage } = await import(
-            '@legendapp/state/persist-plugins/async-storage'
-        );
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const userId = await getCurrentUserId();
+        if (userId) {
+            todosStore$.userId.set(userId);
+            // Load todos from Supabase
+            const { data, error } = await getSupabase()
+                .from('todos')
+                .select('*')
+                .order('position', { ascending: true });
 
-        configureObservablePersistence({
-            pluginLocal: ObservablePersistAsyncStorage,
-            localOptions: {
-                asyncStorage: {
-                    AsyncStorage,
-                },
-            },
-        });
+            if (data && data.length > 0) {
+                const todos: Todo[] = data.map((row) => ({
+                    id: row.id,
+                    content: row.content || '',
+                    isCompleted: row.is_completed || false,
+                    dueDate: row.due_date || null,
+                    position: row.position || 0,
+                    createdAt: row.created_at,
+                    updatedAt: row.updated_at,
+                }));
+                todosStore$.todos.set(todos);
+            }
+        }
+    } catch (error) {
+        console.warn('Could not load from cloud, using local data');
+    }
+}
 
-        persistObservable(todosStore$, {
-            local: 'aside-todos',
+/**
+ * Sync a todo to Supabase
+ */
+async function syncTodo(todo: Todo): Promise<void> {
+    const userId = todosStore$.userId.get();
+    if (!userId) return;
+
+    try {
+        await getSupabase().from('todos').upsert({
+            id: todo.id,
+            user_id: userId,
+            content: todo.content,
+            is_completed: todo.isCompleted,
+            due_date: todo.dueDate,
+            position: todo.position,
+            created_at: todo.createdAt,
+            updated_at: todo.updatedAt,
         });
     } catch (error) {
-        console.warn('Persistence initialization failed:', error);
+        console.warn('Sync failed:', error);
+    }
+}
+
+/**
+ * Delete a todo from Supabase
+ */
+async function deleteTodoFromCloud(id: string): Promise<void> {
+    const userId = todosStore$.userId.get();
+    if (!userId) return;
+
+    try {
+        await getSupabase().from('todos').delete().eq('id', id);
+    } catch (error) {
+        console.warn('Delete sync failed:', error);
     }
 }
 
@@ -75,71 +115,57 @@ export async function initPersistence(): Promise<void> {
  * Store actions - Notepad Logic implementation
  */
 export const todoActions = {
-    /**
-     * Update todo content with debounced persistence
-     */
     updateContent(id: string, content: string): void {
         const todos = todosStore$.todos.get();
         const index = todos.findIndex((t) => t.id === id);
         if (index !== -1) {
-            todosStore$.todos[index].content.set(content);
-            todosStore$.todos[index].updatedAt.set(new Date().toISOString());
+            const now = new Date().toISOString();
+            const todo = { ...todos[index], content, updatedAt: now };
+            todosStore$.todos[index].set(todo);
+            syncTodo(todo);
         }
     },
 
-    /**
-     * Set the parsed due date silently (no UI popup)
-     */
     setDueDate(id: string, dueDate: string | null): void {
         const todos = todosStore$.todos.get();
         const index = todos.findIndex((t) => t.id === id);
         if (index !== -1) {
-            todosStore$.todos[index].dueDate.set(dueDate);
-            todosStore$.todos[index].updatedAt.set(new Date().toISOString());
+            const now = new Date().toISOString();
+            const todo = { ...todos[index], dueDate, updatedAt: now };
+            todosStore$.todos[index].set(todo);
+            syncTodo(todo);
         }
     },
 
-    /**
-     * Handle Enter key - create new row below current
-     */
     insertAfter(id: string): string {
         const todos = todosStore$.todos.get();
         const index = todos.findIndex((t) => t.id === id);
         if (index === -1) return id;
 
-        // Create new todo at next position
         const newTodo = createTodo(index + 1);
-
-        // Update positions of all todos after this one
         const updatedTodos = [...todos];
+
         for (let i = index + 1; i < updatedTodos.length; i++) {
             updatedTodos[i] = { ...updatedTodos[i], position: updatedTodos[i].position + 1 };
         }
 
-        // Insert new todo
         updatedTodos.splice(index + 1, 0, newTodo);
         todosStore$.todos.set(updatedTodos);
         todosStore$.focusedId.set(newTodo.id);
 
+        syncTodo(newTodo);
         return newTodo.id;
     },
 
-    /**
-     * Handle Backspace on empty row - delete and focus previous
-     */
     deleteIfEmpty(id: string): string | null {
         const todos = todosStore$.todos.get();
         const index = todos.findIndex((t) => t.id === id);
 
-        // Don't delete if it's the only row or not empty
         if (index === -1 || todos.length === 1 || todos[index].content !== '') {
             return null;
         }
 
-        // Get previous todo ID for focus
         const prevId = index > 0 ? todos[index - 1].id : todos[1]?.id || null;
-
-        // Remove the todo and update positions
         const updatedTodos = todos
             .filter((t) => t.id !== id)
             .map((t, i) => ({ ...t, position: i }));
@@ -147,25 +173,25 @@ export const todoActions = {
         todosStore$.todos.set(updatedTodos);
         todosStore$.focusedId.set(prevId);
 
+        deleteTodoFromCloud(id);
         return prevId;
     },
 
-    /**
-     * Toggle completion status
-     */
     toggleComplete(id: string): void {
         const todos = todosStore$.todos.get();
         const index = todos.findIndex((t) => t.id === id);
         if (index !== -1) {
-            const current = todosStore$.todos[index].isCompleted.get();
-            todosStore$.todos[index].isCompleted.set(!current);
-            todosStore$.todos[index].updatedAt.set(new Date().toISOString());
+            const now = new Date().toISOString();
+            const todo = {
+                ...todos[index],
+                isCompleted: !todos[index].isCompleted,
+                updatedAt: now,
+            };
+            todosStore$.todos[index].set(todo);
+            syncTodo(todo);
         }
     },
 
-    /**
-     * Set which todo is currently focused
-     */
     setFocused(id: string | null): void {
         todosStore$.focusedId.set(id);
     },

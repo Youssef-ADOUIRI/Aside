@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aside.app"
+      "bundleIdentifier": "com.aside.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +30,11 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Aside",
+      "shortName": "Aside",
+      "themeColor": "#111827",
+      "backgroundColor": "#FFFFFF"
     },
     "plugins": [
       "expo-router",
@@ -42,6 +49,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "42e366b2-122a-4a23-ba3f-7cf52cefc0aa"
+      }
     }
   }
 }

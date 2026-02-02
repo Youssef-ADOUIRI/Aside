@@ -1,11 +1,12 @@
 import { PowerSyncDatabase } from '@powersync/react-native';
 import { AppSchema } from './schema';
+import { SupabaseConnector } from '../lib/powersync-connector';
+import { signInAnonymously } from '../lib/supabase';
 
 /**
  * PowerSync database instance
- * Connects to local SQLite and syncs with the PowerSync service
  */
-export const powerSyncDb = new PowerSyncDatabase({
+export const db = new PowerSyncDatabase({
     schema: AppSchema,
     database: {
         dbFilename: 'aside.sqlite',
@@ -13,39 +14,44 @@ export const powerSyncDb = new PowerSyncDatabase({
 });
 
 /**
- * PowerSync connection configuration
+ * Connector instance
  */
-export const POWERSYNC_CONFIG = {
-    // Local development URL (Docker)
-    backendUrl: 'http://localhost:8080',
-    // In production, this would be your PowerSync cloud URL
-};
+const connector = new SupabaseConnector();
 
 /**
- * Initialize PowerSync connection
- * Call this on app startup
+ * Initialize PowerSync with Supabase
  */
-export async function initPowerSync(): Promise<void> {
+export async function initDatabase(): Promise<void> {
     try {
-        // Initialize the database
-        await powerSyncDb.init();
+        // First, ensure user is authenticated
+        const userId = await signInAnonymously();
+        if (!userId) {
+            console.warn('Could not authenticate, running in offline mode');
+            await db.init();
+            return;
+        }
 
-        // Connect to the sync service
-        // In a real app, you'd authenticate first and pass a JWT
-        await powerSyncDb.connect({
-            endpoint: POWERSYNC_CONFIG.backendUrl,
-        });
+        console.log('Authenticated as:', userId);
+
+        // Initialize the database
+        await db.init();
+
+        // Connect to sync service
+        await db.connect(connector);
 
         console.log('PowerSync connected successfully');
     } catch (error) {
-        console.error('PowerSync connection failed:', error);
-        // The app will work offline - local SQLite is always available
+        console.error('Database initialization failed:', error);
+        // Still initialize for offline use
+        await db.init();
     }
 }
 
 /**
- * Disconnect PowerSync (cleanup)
+ * Disconnect and cleanup
  */
-export async function disconnectPowerSync(): Promise<void> {
-    await powerSyncDb.disconnect();
+export async function closeDatabase(): Promise<void> {
+    await db.disconnectAndClear();
 }
+
+export { AppSchema } from './schema';

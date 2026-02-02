@@ -1,22 +1,23 @@
-import { Column, Table, Schema } from '@powersync/react-native';
+import { column, Schema, Table } from '@powersync/react-native';
 
 /**
  * PowerSync schema definition
- * Mirrors the PostgreSQL todos table structure
+ * Mirrors the Supabase todos table structure
  */
-const TodosTable = new Table({
-    id: new Column({ type: 'text' }),
-    user_id: new Column({ type: 'text' }),
-    content: new Column({ type: 'text' }),
-    is_completed: new Column({ type: 'integer' }), // boolean as 0/1
-    due_date: new Column({ type: 'text' }), // ISO timestamp
-    position: new Column({ type: 'integer' }),
-    created_at: new Column({ type: 'text' }),
-    updated_at: new Column({ type: 'text' }),
+const todos = new Table({
+    // Note: 'id' is automatically included as the primary key
+    user_id: column.text,
+    content: column.text,
+    is_completed: column.integer, // boolean as 0/1
+    due_date: column.text, // ISO timestamp or null
+    position: column.integer,
+    created_at: column.text,
+    updated_at: column.text,
 });
 
 export const AppSchema = new Schema({
-    todos: TodosTable,
+    todos,
 });
 
 export type Database = (typeof AppSchema)['types'];
+export type TodoRecord = Database['todos'];
