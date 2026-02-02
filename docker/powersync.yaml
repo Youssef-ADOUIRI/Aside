@@ -1,0 +1,48 @@
+# PowerSync Service Configuration for Aside
+# Documentation: https://docs.powersync.com/self-hosting/configuration
+
+# Replication source (PostgreSQL)
+replication:
+  # Connection to the source PostgreSQL database
+  connections:
+    - type: postgresql
+      uri: postgresql://aside_user:change_me_in_production@postgres:5432/aside_db
+      # Slot name for logical replication
+      slot_name: powersync_aside
+      # Publication name (created in postgres-init.sql)
+      publication_name: powersync_aside_pub
+
+# Client authentication
+client_auth:
+  # For development, use a simple JWT secret
+  # In production, use proper key management
+  jwks:
+    keys:
+      - kty: oct
+        k: ${POWERSYNC_JWT_SECRET}
+        alg: HS256
+
+# Sync rules define which data syncs to clients
+sync_rules:
+  - bucket_definitions:
+      # User-specific todo items bucket
+      - name: user_todos
+        # Each user gets their own bucket of todos
+        parameters:
+          - SELECT request.user_id() AS user_id
+        data:
+          - SELECT id, content, is_completed, due_date, created_at, updated_at
+            FROM todos
+            WHERE user_id = bucket.user_id
+
+# Storage configuration for PowerSync state
+storage:
+  type: memory  # Use 'mongodb' for production persistence
+
+# API configuration
+api:
+  # Port is set via container port mapping
+  tokens:
+    # Allow anonymous connections for development
+    # Disable in production!
+    allow_anonymous: true

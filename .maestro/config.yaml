@@ -1,0 +1,15 @@
+# Maestro E2E Testing Configuration for Aside
+# https://maestro.mobile.dev/
+
+# App configuration
+appId: com.aside.app
+
+# Test execution settings
+flows:
+  # Directory containing test flows
+  - .maestro/flows/
+
+# Device configuration (optional)
+# device:
+#   platform: iOS
+#   osVersion: "17.0"

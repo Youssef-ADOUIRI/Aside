@@ -1,0 +1,40 @@
+# Aside - Basic Notepad Flow Test
+# Tests core "Notepad Logic" functionality
+
+appId: com.aside.app
+name: Basic Notepad Functionality
+
+---
+# Wait for app to load
+- waitForAnimationToEnd
+
+# Test 1: Initial state - one empty row should be visible
+- assertVisible: "Start typing..."
+
+# Test 2: Type some text
+- tapOn:
+    id: "todo-input-0"
+- inputText: "Buy groceries tomorrow"
+- hideKeyboard
+
+# Test 3: Verify text was entered
+- assertVisible: "Buy groceries"
+
+# Test 4: Press Enter to create new row
+- tapOn:
+    id: "todo-input-0"
+- pressKey: Enter
+
+# Test 5: Verify new row is created and focused
+- assertVisible:
+    id: "todo-input-1"
+
+# Test 6: Type in new row
+- inputText: "Call doctor"
+- hideKeyboard
+
+# Test 7: Go back to empty row and delete it
+- tapOn:
+    id: "todo-input-1"
+- pressKey: Backspace
+# Verify we're back to the previous row
