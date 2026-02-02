@@ -1,74 +1,49 @@
-import React, { useEffect, useState } from 'react';
-import { Stack } from 'expo-router';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StyleSheet, View, Text } from 'react-native';
-import { initPersistence } from '../src/store/todosStore';
-import { signInAnonymously } from '../src/lib/supabase';
+import React, { useEffect } from 'react';
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
+import { SessionProvider, useSession } from './ctx';
 
-/**
- * Root layout - wraps the app with required providers
- */
-export default function RootLayout() {
-  const [isReady, setIsReady] = useState(false);
+function InitialLayout() {
+  const { session, isLoading } = useSession();
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
-    async function init() {
-      try {
-        // Initialize local persistence
-        await initPersistence();
-        
-        // Sign in anonymously to Supabase
-        const userId = await signInAnonymously();
-        console.log('Signed in as:', userId);
-        
-        setIsReady(true);
-      } catch (err) {
-        console.error('Init error:', err);
-        setIsReady(true); // Still allow app to work offline
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(auth)'; // If we had groups, but checking manual route
+    const isLoginPage = segments[0] === 'login';
+    const isSignUpPage = segments[0] === 'signup';
+
+    if (!session) {
+      // If not authenticated, redirect to login (unless already on public auth pages)
+      if (!isLoginPage && !isSignUpPage) {
+        router.replace('/login');
+      }
+    } else {
+      // If authenticated, redirect to home if user tries to access auth pages
+      if (isLoginPage || isSignUpPage) {
+        router.replace('/');
       }
     }
-    init();
-  }, []);
+  }, [session, isLoading, segments]);
 
-  if (!isReady) {
-    return (
-      <View style={styles.loading}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
+  return <Slot />;
+}
 
+export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <SafeAreaProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: styles.content,
-            animation: 'none',
-          }}
-        />
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <SessionProvider>
+      <View style={styles.container}>
+        <InitialLayout />
+      </View>
+    </SessionProvider>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  content: {
     backgroundColor: '#FFFFFF',
-  },
-  loading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
   },
 });

@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { adapter } from './storage'; // Will automatically pick .web.ts or .ts
 import { Platform } from 'react-native';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -12,21 +13,26 @@ let _supabase: SupabaseClient | null = null;
  */
 export function getSupabase(): SupabaseClient {
     if (!_supabase) {
-        // Only use AsyncStorage on native platforms
-        const storageConfig = Platform.OS !== 'web'
-            ? {
-                storage: require('@react-native-async-storage/async-storage').default,
-            }
-            : {};
+        console.log('[Debug] Supabase: Initializing client with Platform Adapter');
 
-        _supabase = createClient(supabaseUrl, supabaseKey, {
+        const clientOptions: any = {
             auth: {
-                ...storageConfig,
+                storage: adapter, // Uses purely web or purely native implementation
                 autoRefreshToken: true,
                 persistSession: true,
                 detectSessionInUrl: false,
+                debug: true,
             },
-        });
+            global: {
+                fetch: (url: any, options: any) => {
+                    return fetch(url, options);
+                }
+            }
+        };
+
+        console.log('[Debug] Supabase: Options prepared, creating client...');
+        _supabase = createClient(supabaseUrl, supabaseKey, clientOptions);
+        console.log('[Debug] Supabase: Client created successfully');
     }
     return _supabase;
 }
