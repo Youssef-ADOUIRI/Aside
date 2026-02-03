@@ -1,22 +1,11 @@
 {
-    "version": 2,
-    "builds": [
+    "framework": "other",
+    "buildCommand": "npx expo export --platform web",
+    "outputDirectory": "dist",
+    "rewrites": [
         {
-            "src": "package.json",
-            "use": "@vercel/static-build",
-            "config": {
-                "distDir": "dist"
-            }
-        }
-    ],
-    "routes": [
-        {
-            "src": "/assets/(.*)",
-            "dest": "/assets/$1"
-        },
-        {
-            "src": "/(.*)",
-            "dest": "/"
+            "source": "/(.*)",
+            "destination": "/index.html"
         }
     ]
 }
