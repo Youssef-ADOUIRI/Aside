@@ -183,8 +183,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 28,
     color: '#000000', // Explicit black
-    paddingVertical: 8,
-    minHeight: 44, // Explicit min height
+    paddingVertical: 0,
+    minHeight: 28, // Matches line height for dense packing
     backgroundColor: 'transparent',
     // Web
     ...Platform.select({
