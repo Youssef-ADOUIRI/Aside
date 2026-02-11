@@ -60,13 +60,17 @@ function ListPage({ listId, onSlashCommand }: { listId: string; onSlashCommand: 
   };
 
   const handleTextChange = (id: string, text: string) => {
+    updateTodo(id, text);
+  };
+
+  // Slash commands only fire on Enter (submit)
+  const handleSubmit = (id: string, text: string, index: number) => {
     const cmd = text.trim().toLowerCase();
 
     if (cmd === '/logout' || cmd === '/exit') {
       getSupabase().auth.signOut();
       return;
     }
-
     if (cmd.startsWith('/new ')) {
       const name = text.trim().substring(5).trim();
       if (name) {
@@ -89,7 +93,8 @@ function ListPage({ listId, onSlashCommand }: { listId: string; onSlashCommand: 
       return;
     }
 
-    updateTodo(id, text);
+    // Normal Enter → new line
+    handleEnter(index);
   };
 
   const renderItem = useCallback(({ item, index }: { item: Todo; index: number }) => {
@@ -103,7 +108,7 @@ function ListPage({ listId, onSlashCommand }: { listId: string; onSlashCommand: 
           style={[styles.input, item.due_date ? styles.inputWithDate : {}]}
           value={item.text}
           onChangeText={(text) => handleTextChange(item.id, text)}
-          onSubmitEditing={() => handleEnter(index)}
+          onSubmitEditing={() => handleSubmit(item.id, item.text, index)}
           blurOnSubmit={false}
           onKeyPress={(e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
             if (e.nativeEvent.key === 'Backspace') {
@@ -111,7 +116,7 @@ function ListPage({ listId, onSlashCommand }: { listId: string; onSlashCommand: 
             }
             if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter') {
               e.preventDefault();
-              handleEnter(index);
+              handleSubmit(item.id, item.text, index);
             }
           }}
           placeholder="Start writing..." 
@@ -240,19 +245,12 @@ export default function IndexScreen() {
     }
   }, [activeIndex, pageWidth]);
 
-  // Arrow key navigation (web only)
+  // Ctrl+Shift+Arrow navigation (web only — works even in inputs)
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only navigate when no text input is focused
-      const active = document.activeElement;
-      const isInputFocused = active && (
-        active.tagName === 'INPUT' || 
-        active.tagName === 'TEXTAREA' || 
-        (active as any).contentEditable === 'true'
-      );
-      if (isInputFocused) return;
+      if (!e.ctrlKey || !e.shiftKey) return;
 
       if (e.key === 'ArrowLeft' && activeIndex > 0) {
         e.preventDefault();
