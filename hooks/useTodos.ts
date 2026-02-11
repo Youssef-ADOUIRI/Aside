@@ -8,9 +8,10 @@ export interface Todo {
     text: string;
     position: number;
     due_date?: string | null; // ISO Date String
+    list_id?: string | null;
 }
 
-export function useTodos() {
+export function useTodos(listId: string | null) {
     // Initialize with empty array
     const [todos, setTodos] = useState<Todo[]>([]);
 
@@ -42,23 +43,23 @@ export function useTodos() {
         return { date: null, hasDate: false };
     };
 
-    // Initial Load when User ID is available
+    // Load when User ID or listId changes
     useEffect(() => {
-        if (userId) {
-            loadTodos(userId);
+        if (userId && listId) {
+            loadTodos(userId, listId);
         } else {
-            // No user, clear todos
             setTodos([]);
         }
-    }, [userId]);
+    }, [userId, listId]);
 
-    const loadTodos = async (uid: string) => {
+    const loadTodos = async (uid: string, lid: string) => {
         try {
-            console.log('[Sync] Loading todos for user:', uid);
+            console.log('[Sync] Loading todos for user:', uid, 'list:', lid);
             const { data, error } = await getSupabase()
                 .from('todos')
                 .select('*')
                 .eq('user_id', uid)
+                .eq('list_id', lid)
                 .order('position', { ascending: true });
 
             if (error) throw error;
@@ -70,14 +71,15 @@ export function useTodos() {
                     id: t.id,
                     text: t.content || '',
                     position: t.position || 0,
-                    due_date: t.due_date || null // Map DB column
+                    due_date: t.due_date || null,
+                    list_id: t.list_id || null,
                 })));
             } else {
-                setTodos([{ id: genId(), text: '', position: 0 }]);
+                setTodos([{ id: genId(), text: '', position: 0, list_id: lid }]);
             }
         } catch (e) {
             console.error('[Sync] Load Failed:', e);
-            setTodos([{ id: genId(), text: '', position: 0 }]);
+            setTodos([{ id: genId(), text: '', position: 0, list_id: listId }]);
         }
     };
 
@@ -95,7 +97,8 @@ export function useTodos() {
                     user_id: userId,
                     content: todo.text,
                     position: todo.position,
-                    due_date: todo.due_date, // Sync date
+                    due_date: todo.due_date,
+                    list_id: todo.list_id || listId,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                 });
@@ -105,7 +108,7 @@ export function useTodos() {
                 console.error('[Sync] Insert Failed:', e);
             }
         });
-    }, [userId]);
+    }, [userId, listId]);
 
     const syncUpdate = useCallback((todo: Todo) => {
         if (!userId) return;
@@ -116,7 +119,8 @@ export function useTodos() {
                     user_id: userId,
                     content: todo.text,
                     position: todo.position,
-                    due_date: todo.due_date, // Sync date
+                    due_date: todo.due_date,
+                    list_id: todo.list_id || listId,
                     updated_at: new Date().toISOString(),
                 });
                 if (error) throw error;
@@ -125,7 +129,7 @@ export function useTodos() {
                 console.error('[Sync] Update Failed:', e);
             }
         });
-    }, [userId]);
+    }, [userId, listId]);
 
     const syncDelete = useCallback((id: string) => {
         if (!userId) return;
@@ -141,7 +145,7 @@ export function useTodos() {
     }, [userId]);
 
     const addTodo = (index: number) => {
-        const newTodo: Todo = { id: genId(), text: '', position: index, due_date: null };
+        const newTodo: Todo = { id: genId(), text: '', position: index, due_date: null, list_id: listId };
         setTodos(prev => {
             const next = [...prev];
             next.splice(index, 0, newTodo);
@@ -161,11 +165,6 @@ export function useTodos() {
                     const updated = {
                         ...t,
                         text,
-                        // Only update due_date if we actually found one, 
-                        // OR if we want to support clearing it? 
-                        // For now, let's strictly ADD dates if found.
-                        // Ideally we check if text changed significant enough.
-                        // Simplification: If date found, set it. 
                         ...(hasDate ? { due_date: date } : {})
                     };
                     return updated;
