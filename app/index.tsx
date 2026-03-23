@@ -230,7 +230,47 @@ function SettingsModal({ visible, onClose, colors, onToggleTheme, themeMode, ema
   themeMode: string;
   email?: string;
 }) {
+  const [showGuide, setShowGuide] = useState(false);
+
   if (!visible) return null;
+
+  if (showGuide) {
+    return (
+      <Modal transparent animationType="fade" visible onRequestClose={() => setShowGuide(false)}>
+        <Pressable style={[styles.drawerBackdrop, { backgroundColor: colors.overlay, justifyContent: 'center', alignItems: 'center' }]} onPress={() => setShowGuide(false)}>
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.drawer, { backgroundColor: colors.card, minWidth: 280, maxWidth: 340, paddingVertical: 16, paddingHorizontal: 20 }]}>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text, marginBottom: 12 }}>Commands</Text>
+
+              <Text style={styles.guideSection}>List management</Text>
+              <Text style={[styles.guideLine, { color: colors.text }]}><Text style={[styles.guideCmd, { color: colors.textMuted }]}>/new </Text>name  — create list</Text>
+              <Text style={[styles.guideLine, { color: colors.text }]}><Text style={[styles.guideCmd, { color: colors.textMuted }]}>/rename </Text>name  — rename list</Text>
+              <Text style={[styles.guideLine, { color: colors.text }]}><Text style={[styles.guideCmd, { color: colors.textMuted }]}>/delete</Text>  — delete list</Text>
+
+              <View style={{ height: 10 }} />
+              <Text style={styles.guideSection}>Account</Text>
+              <Text style={[styles.guideLine, { color: colors.text }]}><Text style={[styles.guideCmd, { color: colors.textMuted }]}>/logout</Text>  — sign out</Text>
+
+              <View style={{ height: 10 }} />
+              <Text style={styles.guideSection}>Shortcuts</Text>
+              <Text style={[styles.guideLine, { color: colors.text }]}><Text style={[styles.guideCmd, { color: colors.textMuted }]}>Ctrl+Shift+←/→</Text>  — switch list</Text>
+              <Text style={[styles.guideLine, { color: colors.text }]}><Text style={[styles.guideCmd, { color: colors.textMuted }]}>Enter</Text>  — new line</Text>
+              <Text style={[styles.guideLine, { color: colors.text }]}><Text style={[styles.guideCmd, { color: colors.textMuted }]}>Backspace</Text>  — delete empty line</Text>
+
+              <View style={{ height: 10 }} />
+              <Text style={styles.guideSection}>Tips</Text>
+              <Text style={[styles.guideLine, { color: colors.textMuted, fontSize: 12 }]}>Type a date like "tomorrow" or "next friday" to auto-set a deadline.</Text>
+
+              <Pressable onPress={() => setShowGuide(false)} style={{ marginTop: 16, alignItems: 'center' }}>
+                <Text style={{ color: colors.textMuted, fontSize: 13 }}>Close</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  }
+
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <Pressable style={[styles.drawerBackdrop, { backgroundColor: colors.overlay }]} onPress={onClose}>
@@ -247,6 +287,10 @@ function SettingsModal({ visible, onClose, colors, onToggleTheme, themeMode, ema
                 <Text style={[styles.drawerItemText, { color: colors.text }]}>
                   {themeMode === 'dark' ? '☀ Light mode' : '◑ Dark mode'}
                 </Text>
+              </Pressable>
+              <View style={[styles.drawerSep, { backgroundColor: colors.separator }]} />
+              <Pressable style={styles.drawerItem} onPress={() => setShowGuide(true)}>
+                <Text style={[styles.drawerItemText, { color: colors.text }]}>? Commands</Text>
               </Pressable>
               <View style={[styles.drawerSep, { backgroundColor: colors.separator }]} />
               <Pressable style={styles.drawerItem} onPress={() => { onClose(); getSupabase().auth.signOut(); }}>
@@ -695,4 +739,20 @@ const styles = StyleSheet.create({
       web: { outlineStyle: 'none' },
     }),
   } as any,
+  guideSection: {
+    fontSize: 11,
+    fontWeight: '600' as any,
+    textTransform: 'uppercase' as any,
+    color: '#999',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  guideLine: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  guideCmd: {
+    fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier',
+    fontSize: 12,
+  },
 });
