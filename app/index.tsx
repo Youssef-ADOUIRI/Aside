@@ -16,13 +16,14 @@ import {
 } from 'react-native';
 import { useTodos, type Todo } from '../hooks/useTodos';
 import { useLists } from '../hooks/useLists';
+import { useTheme, type ThemeColors } from '../hooks/useTheme';
 import { useSession } from './ctx';
 import { getSupabase } from '../src/lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // --- ListPage Component ---
-function ListPage({ listId, onSlashCommand }: { listId: string; onSlashCommand: (cmd: string, arg: string) => void }) {
+function ListPage({ listId, onSlashCommand, colors }: { listId: string; onSlashCommand: (cmd: string, arg: string) => void; colors: ThemeColors }) {
   const { todos, addTodo, updateTodo, deleteTodo } = useTodos(listId);
   const inputRefs = useRef<Map<string, TextInput>>(new Map());
 
@@ -105,7 +106,7 @@ function ListPage({ listId, onSlashCommand }: { listId: string; onSlashCommand: 
             if (ref) inputRefs.current.set(item.id, ref);
             else inputRefs.current.delete(item.id);
           }}
-          style={[styles.input, item.due_date ? styles.inputWithDate : {}]}
+          style={[styles.input, { color: colors.text }, (item.due_date || item.text) ? styles.inputWithActions : {}]}
           value={item.text}
           onChangeText={(text) => handleTextChange(item.id, text)}
           onSubmitEditing={() => handleSubmit(item.id, item.text, index)}
@@ -120,19 +121,28 @@ function ListPage({ listId, onSlashCommand }: { listId: string; onSlashCommand: 
             }
           }}
           placeholder="Start writing..." 
-          placeholderTextColor="#A0A0A0" 
+          placeholderTextColor={colors.placeholder} 
           multiline={true}
           scrollEnabled={false} 
           autoCapitalize="sentences"
         />
         {item.due_date && (
-          <Text style={styles.dateIndicator}>
+          <Text style={[styles.dateIndicator, { color: colors.accent }]}>
             {new Date(item.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
           </Text>
         )}
+        {item.text.length > 0 && (
+          <Pressable
+            style={styles.deleteBtn}
+            onPress={() => deleteTodo(item.id)}
+            hitSlop={6}
+          >
+            <Text style={[styles.deleteBtnText, { color: colors.textFaint }]}>×</Text>
+          </Pressable>
+        )}
       </View>
     );
-  }, [todos, updateTodo]);
+  }, [todos, updateTodo, colors]);
 
   return (
     <View style={styles.pageContainer}>
@@ -165,7 +175,8 @@ function ListDrawer({
   activeListId, 
   onSelect, 
   onAdd, 
-  onClose 
+  onClose,
+  colors 
 }: { 
   visible: boolean;
   lists: { id: string; name: string }[];
@@ -173,16 +184,16 @@ function ListDrawer({
   onSelect: (id: string) => void;
   onAdd: () => void;
   onClose: () => void;
+  colors: ThemeColors;
 }) {
   if (!visible) return null;
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
-      <Pressable style={styles.drawerBackdrop} onPress={onClose}>
+      <Pressable style={[styles.drawerBackdrop, { backgroundColor: colors.overlay }]} onPress={onClose}>
         <View style={styles.drawerContainer}>
           <Pressable onPress={(e) => e.stopPropagation()}>
-            <View style={styles.drawer}>
-              {/* List items */}
+            <View style={[styles.drawer, { backgroundColor: colors.card }]}>
               {lists.map((list) => (
                 <Pressable 
                   key={list.id} 
@@ -191,19 +202,55 @@ function ListDrawer({
                 >
                   <Text style={[
                     styles.drawerItemText,
-                    list.id === activeListId && styles.drawerItemActive,
+                    { color: colors.textMuted },
+                    list.id === activeListId && { color: colors.text, fontWeight: '600' as any },
                   ]}>
                     {list.name || 'Untitled'}
                   </Text>
                 </Pressable>
               ))}
-
-              {/* Separator */}
-              <View style={styles.drawerSep} />
-
-              {/* Add new list */}
+              <View style={[styles.drawerSep, { backgroundColor: colors.separator }]} />
               <Pressable style={styles.drawerItem} onPress={onAdd}>
-                <Text style={styles.drawerAddText}>+ new list</Text>
+                <Text style={[styles.drawerAddText, { color: colors.textMuted }]}>+ new list</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// --- Settings Modal ---
+function SettingsModal({ visible, onClose, colors, onToggleTheme, themeMode, email }: {
+  visible: boolean;
+  onClose: () => void;
+  colors: ThemeColors;
+  onToggleTheme: () => void;
+  themeMode: string;
+  email?: string;
+}) {
+  if (!visible) return null;
+  return (
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+      <Pressable style={[styles.drawerBackdrop, { backgroundColor: colors.overlay }]} onPress={onClose}>
+        <View style={styles.settingsContainer}>
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.drawer, { backgroundColor: colors.card, minWidth: 220 }]}>
+              {email && (
+                <View style={styles.drawerItem}>
+                  <Text style={{ fontSize: 12, color: colors.textFaint }}>{email}</Text>
+                </View>
+              )}
+              <View style={[styles.drawerSep, { backgroundColor: colors.separator }]} />
+              <Pressable style={styles.drawerItem} onPress={onToggleTheme}>
+                <Text style={[styles.drawerItemText, { color: colors.text }]}>
+                  {themeMode === 'dark' ? '☀ Light mode' : '◑ Dark mode'}
+                </Text>
+              </Pressable>
+              <View style={[styles.drawerSep, { backgroundColor: colors.separator }]} />
+              <Pressable style={styles.drawerItem} onPress={() => { onClose(); getSupabase().auth.signOut(); }}>
+                <Text style={[styles.drawerItemText, { color: colors.accent }]}>Logout</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -216,6 +263,7 @@ function ListDrawer({
 // --- Main Screen ---
 export default function IndexScreen() {
   const { session } = useSession();
+  const { mode: themeMode, toggle: toggleTheme, colors } = useTheme();
   const {
     lists,
     activeListId,
@@ -229,6 +277,7 @@ export default function IndexScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [pageWidth, setPageWidth] = useState(SCREEN_WIDTH);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [showNewListInput, setShowNewListInput] = useState(false);
   const [newListName, setNewListName] = useState('');
   const newListInputRef = useRef<TextInput>(null);
@@ -238,12 +287,13 @@ export default function IndexScreen() {
     [lists, activeListId]
   );
 
-  // Scroll to active list when it changes
-  useEffect(() => {
-    if (activeIndex >= 0 && scrollRef.current) {
-      scrollRef.current.scrollTo({ x: activeIndex * pageWidth, animated: true });
+  // Direct scroll — only called from programmatic triggers (keyboard, drawer)
+  const scrollToPage = (index: number) => {
+    if (scrollRef.current && index >= 0 && index < lists.length) {
+      scrollRef.current.scrollTo({ x: index * pageWidth, animated: true });
+      setActiveListId(lists[index].id);
     }
-  }, [activeIndex, pageWidth]);
+  };
 
   // Ctrl+Shift+Arrow navigation (web only — works even in inputs)
   useEffect(() => {
@@ -254,21 +304,30 @@ export default function IndexScreen() {
 
       if (e.key === 'ArrowLeft' && activeIndex > 0) {
         e.preventDefault();
-        setActiveListId(lists[activeIndex - 1].id);
+        scrollToPage(activeIndex - 1);
       } else if (e.key === 'ArrowRight' && activeIndex < lists.length - 1) {
         e.preventDefault();
-        setActiveListId(lists[activeIndex + 1].id);
+        scrollToPage(activeIndex + 1);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeIndex, lists, setActiveListId]);
+  }, [activeIndex, lists, pageWidth]);
 
   const handleScrollEnd = (e: any) => {
     const offsetX = e.nativeEvent.contentOffset.x;
     const newIndex = Math.round(offsetX / pageWidth);
     if (newIndex >= 0 && newIndex < lists.length) {
+      setActiveListId(lists[newIndex].id);
+    }
+  };
+
+  // Live header name update while swiping (no scrollTo — just state)
+  const handleScroll = (e: any) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const newIndex = Math.round(offsetX / pageWidth);
+    if (newIndex >= 0 && newIndex < lists.length && lists[newIndex].id !== activeListId) {
       setActiveListId(lists[newIndex].id);
     }
   };
@@ -303,12 +362,12 @@ export default function IndexScreen() {
     if (w > 0) setPageWidth(w);
   };
 
-  if (!isReady) return <View style={styles.container} />;
+  if (!isReady) return <View style={[styles.container, { backgroundColor: colors.bg }]} />;
 
   if (lists.length === 0) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: '#999', fontSize: 14 }}>Loading...</Text>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }]}>
+        <Text style={{ color: colors.textMuted, fontSize: 14 }}>Loading...</Text>
       </View>
     );
   }
@@ -316,22 +375,26 @@ export default function IndexScreen() {
   const activeList = lists.find((l) => l.id === activeListId);
 
   return (
-    <View style={styles.container} onLayout={onLayout}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]} onLayout={onLayout}>
       {/* Header */}
       <View style={styles.header}>
-        {/* List name (tappable to open drawer) */}
         <Pressable onPress={() => setDrawerVisible(true)} hitSlop={12}>
-          <Text style={styles.headerListName} numberOfLines={1}>
+          <Text style={[styles.headerListName, { color: colors.textFaint }]} numberOfLines={1}>
             {activeList?.name || ''}
-            <Text style={styles.headerChevron}> ▾</Text>
+            <Text style={{ fontSize: 10, color: colors.textFaint }}> ▾</Text>
           </Text>
         </Pressable>
 
-        {session?.user?.email && (
-          <Text style={styles.headerEmail} numberOfLines={1}>
-            {session.user.email}
-          </Text>
-        )}
+        <View style={styles.headerRight}>
+          <Pressable onPress={() => setSettingsVisible(true)} hitSlop={12}>
+            <Text style={[styles.headerGear, { color: colors.textFaint }]}>⚙</Text>
+          </Pressable>
+          {session?.user?.email && (
+            <Text style={[styles.headerEmail, { color: colors.textFaint }]} numberOfLines={1}>
+              {session.user.email}
+            </Text>
+          )}
+        </View>
       </View>
 
       {/* Horizontal paging */}
@@ -341,6 +404,8 @@ export default function IndexScreen() {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScrollEnd}
+        onScrollEndDrag={handleScrollEnd}
+        onScroll={handleScroll}
         scrollEventThrottle={16}
         style={Platform.OS === 'web'
           ? [styles.scrollView, { scrollSnapType: 'x mandatory' } as any]
@@ -356,7 +421,7 @@ export default function IndexScreen() {
               Platform.OS === 'web' ? { scrollSnapAlign: 'start' } as any : {},
             ]}
           >
-            <ListPage listId={list.id} onSlashCommand={handleSlashCommand} />
+            <ListPage listId={list.id} onSlashCommand={handleSlashCommand} colors={colors} />
           </View>
         ))}
       </ScrollView>
@@ -367,13 +432,15 @@ export default function IndexScreen() {
           {lists.map((list, i) => (
             <Pressable
               key={list.id}
-              onPress={() => setActiveListId(list.id)}
+              onPress={() => scrollToPage(i)}
               hitSlop={8}
             >
               <View
                 style={[
                   styles.dot,
-                  i === activeIndex ? styles.dotActive : styles.dotInactive,
+                  i === activeIndex
+                    ? [styles.dotActive, { backgroundColor: colors.dotActive }]
+                    : [styles.dotInactive, { backgroundColor: colors.dotInactive }],
                 ]}
               />
             </Pressable>
@@ -386,21 +453,35 @@ export default function IndexScreen() {
         visible={drawerVisible}
         lists={lists}
         activeListId={activeListId}
-        onSelect={(id) => setActiveListId(id)}
+        onSelect={(id) => {
+          const idx = lists.findIndex(l => l.id === id);
+          scrollToPage(idx);
+        }}
         onAdd={handleAddFromDrawer}
         onClose={() => { setDrawerVisible(false); setShowNewListInput(false); }}
+        colors={colors}
+      />
+
+      {/* Settings */}
+      <SettingsModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+        colors={colors}
+        onToggleTheme={toggleTheme}
+        themeMode={themeMode}
+        email={session?.user?.email}
       />
 
       {/* New List Input (appears inside drawer via modal) */}
       {drawerVisible && showNewListInput && (
         <Modal transparent animationType="none" visible>
           <Pressable 
-            style={styles.drawerBackdrop} 
+            style={[styles.drawerBackdrop, { backgroundColor: colors.overlay }]} 
             onPress={() => { setShowNewListInput(false); setDrawerVisible(false); }}
           >
             <View style={styles.drawerContainer}>
               <Pressable onPress={(e) => e.stopPropagation()}>
-                <View style={styles.drawer}>
+                <View style={[styles.drawer, { backgroundColor: colors.card }]}>
                   {lists.map((list) => (
                     <Pressable 
                       key={list.id} 
@@ -409,19 +490,20 @@ export default function IndexScreen() {
                     >
                       <Text style={[
                         styles.drawerItemText,
-                        list.id === activeListId && styles.drawerItemActive,
+                        { color: colors.textMuted },
+                        list.id === activeListId && { color: colors.text, fontWeight: '600' as any },
                       ]}>
                         {list.name || 'Untitled'}
                       </Text>
                     </Pressable>
                   ))}
-                  <View style={styles.drawerSep} />
+                  <View style={[styles.drawerSep, { backgroundColor: colors.separator }]} />
                   <View style={styles.drawerItem}>
                     <TextInput
                       ref={newListInputRef}
-                      style={styles.drawerNewInput}
+                      style={[styles.drawerNewInput, { color: colors.text }]}
                       placeholder="List name..."
-                      placeholderTextColor="#BBB"
+                      placeholderTextColor={colors.placeholder}
                       value={newListName}
                       onChangeText={setNewListName}
                       onSubmitEditing={handleNewListSubmit}
@@ -439,11 +521,10 @@ export default function IndexScreen() {
   );
 }
 
-// --- Styles ---
+// --- Styles (layout only, colors applied inline via theme) ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     ...Platform.select({
       web: { height: '100vh', overflow: 'hidden' },
     }),
@@ -465,16 +546,18 @@ const styles = StyleSheet.create({
   },
   headerListName: {
     fontSize: 12,
-    color: '#BBB',
     maxWidth: 200,
-  },
-  headerChevron: {
-    fontSize: 10,
-    color: '#CCC',
   },
   headerEmail: {
     fontSize: 12,
-    color: '#CCC',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerGear: {
+    fontSize: 14,
   },
   scrollView: {
     flex: 1,
@@ -507,11 +590,10 @@ const styles = StyleSheet.create({
   },
   input: {
     width: '100%',
-    fontSize: 18,
-    lineHeight: 28,
-    color: '#000000',
-    paddingVertical: 0,
-    minHeight: 28,
+    fontSize: 16,
+    lineHeight: 18,
+    paddingVertical: 1,
+    minHeight: 18,
     backgroundColor: 'transparent',
     ...Platform.select({
       web: { outlineStyle: 'none' }
@@ -521,18 +603,29 @@ const styles = StyleSheet.create({
     height: 400,
     width: '100%',
   },
-  inputWithDate: {
-    paddingRight: 60,
+  inputWithActions: {
+    paddingRight: 40,
+  },
+  deleteBtn: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 20,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  } as any,
+  deleteBtnText: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   dateIndicator: {
     position: 'absolute',
     right: 0,
-    top: 14,
+    top: 4,
     fontSize: 12,
-    color: '#FF5555',
     opacity: 0.7,
   },
-  // Page dots
   dotsContainer: {
     position: 'absolute',
     bottom: 20,
@@ -550,17 +643,13 @@ const styles = StyleSheet.create({
   dotActive: {
     width: 8,
     height: 8,
-    backgroundColor: '#999',
   },
   dotInactive: {
     width: 6,
     height: 6,
-    backgroundColor: '#DDD',
   },
-  // Drawer
   drawerBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.15)',
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
   },
@@ -568,8 +657,12 @@ const styles = StyleSheet.create({
     marginTop: Platform.OS === 'web' ? 45 : 75,
     marginLeft: 16,
   },
+  settingsContainer: {
+    marginTop: Platform.OS === 'web' ? 45 : 75,
+    marginRight: 16,
+    alignSelf: 'flex-end',
+  },
   drawer: {
-    backgroundColor: '#fff',
     borderRadius: 10,
     paddingVertical: 6,
     minWidth: 180,
@@ -585,25 +678,17 @@ const styles = StyleSheet.create({
   },
   drawerItemText: {
     fontSize: 15,
-    color: '#333',
-  },
-  drawerItemActive: {
-    color: '#000',
-    fontWeight: '600',
   },
   drawerSep: {
     height: 1,
-    backgroundColor: '#F0F0F0',
     marginHorizontal: 12,
     marginVertical: 4,
   },
   drawerAddText: {
     fontSize: 14,
-    color: '#999',
   },
   drawerNewInput: {
     fontSize: 15,
-    color: '#333',
     paddingVertical: 0,
     minHeight: 24,
     ...Platform.select({
