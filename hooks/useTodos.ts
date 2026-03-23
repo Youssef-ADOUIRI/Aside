@@ -165,7 +165,7 @@ export function useTodos(listId: string | null) {
                     const updated = {
                         ...t,
                         text,
-                        ...(hasDate ? { due_date: date } : {})
+                        ...(hasDate ? { due_date: date } : { due_date: null })
                     };
                     return updated;
                 }

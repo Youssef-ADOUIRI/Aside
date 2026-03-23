@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
   },
   dateIndicator: {
     position: 'absolute',
-    right: 0,
+    right: 22,
     top: 4,
     fontSize: 12,
     opacity: 0.7,
